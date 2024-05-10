@@ -189,35 +189,12 @@ class SetupHelper():
         else:
             raise ReferenceError("startedTable creation failed!")
             
-            
-    def create_date_lookup(self):
-        if(self.started):
-            print(f"Creating date_lookup table...", end='')
-            spark.sql(f"""CREATE TABLE IF NOT EXISTS {self.catalog}.{self.db_name}.date_lookup(
-                    date date, 
-                    week int, 
-                    year int, 
-                    month int, 
-                    dayofweek int, 
-                    dayofmonth int, 
-                    dayofyear int, 
-                    week_part string)
-                  """)  
-            print("Done")
-        else:
-            raise ReferenceError("startedTable creation failed!")
-            
     def create_workout_bpm_summary(self):
         if(self.started):
-            print(f"Creating workout_bpm_summary table...", end='')
             spark.sql(f"""CREATE TABLE IF NOT EXISTS {self.catalog}.{self.db_name}.workout_bpm_summary(
                     workout_id INT, 
                     session_id INT, 
-                    user_id BIGINT, 
-                    age STRING, 
-                    gender STRING, 
-                    city STRING, 
-                    state STRING, 
+                    user_id BIGINT,
                     min_bpm DOUBLE, 
                     avg_bpm DOUBLE, 
                     max_bpm DOUBLE, 
@@ -225,11 +202,10 @@ class SetupHelper():
                   """)
             print("Done")
         else:
-            raise ReferenceError("startedTable creation failed!")
+            raise ReferenceError("started Table creation failed!")
             
     def create_gym_summary(self):
         if(self.started):
-            print(f"Creating gym_summar gold view...", end='')
             spark.sql(f"""CREATE OR REPLACE VIEW {self.catalog}.{self.db_name}.gym_summary AS
                             SELECT to_date(login::timestamp) date,
                             gym, l.mac_address, workout_id, session_id, 
@@ -263,16 +239,9 @@ class SetupHelper():
         self.create_completed_workouts()
         self.create_workout_bpm()
         self.create_user_bins()
-        self.create_date_lookup()
         self.create_workout_bpm_summary()  
         self.create_gym_summary()
         print(f"Setup completed in {int(time.time()) - start} seconds")
-        
-    def assert_table(self, table_name):
-        assert spark.sql(f"SHOW TABLES IN {self.catalog}.{self.db_name}") \
-                   .filter(f"isTemporary == false and tableName == '{table_name}'") \
-                   .count() == 1, f"The table {table_name} is missing"
-        print(f"Found {table_name} table in {self.catalog}.{self.db_name}: Success")
         
     def validate(self):
         import time
@@ -283,7 +252,7 @@ class SetupHelper():
                     .count() == 1, f"The database '{self.catalog}.{self.db_name}' is missing"
         print(f"Found database {self.catalog}.{self.db_name}: Success")
         self.assert_table("users_registered")   
-        self.assert_table("gym_logs")        
+        self.assert_table("gym_logs")
         self.assert_table("kafka_dump")
         self.assert_table("users")
         self.assert_table("gym_logs")
@@ -292,10 +261,8 @@ class SetupHelper():
         self.assert_table("workouts")
         self.assert_table("completed_workouts")
         self.assert_table("workout_bpm")
-        self.assert_table("user_bins")
-        self.assert_table("date_lookup")
         self.assert_table("workout_bpm_summary") 
-        self.assert_table("gym_summary") 
+        self.assert_table("gym_summary")
         print(f"Setup validation completed in {int(time.time()) - start} seconds")
         
     def cleanup(self): 
