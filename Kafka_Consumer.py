@@ -3,6 +3,7 @@ from pyspark.sql import functions as F
 
 class Kafka_Consumer:
     def __init__(self):
+        # Initialize Kafka configuration
         self.Conf = Configuration()
         self.checkpoint_base = self.Conf.kafkaTopic + "/user_topic_test"
         self.BOOTSTRAP_SERVER = ""
@@ -11,7 +12,9 @@ class Kafka_Consumer:
         self.CLUSTER_API_SECRET = ""
 
     def ingestFromKafka(self, startingTime=1, maxOffsetsPerTrigger=10000):
+        # Start a Spark session
         spark = SparkSession.builder.appName("BronzeStream").getOrCreate()
+        # Read from Kafka stream
         data = (spark.readStream
                 .format("kafka")
                 .option("kafka.bootstrap.servers", self.BOOTSTRAP_SERVER)
@@ -25,6 +28,7 @@ class Kafka_Consumer:
         return data
     
     def getSchema(self):
+        # Define schema for Kafka data
         return """
             user_id LONG, update_type STRING, timestamp LONG, 
             dob STRING, sex STRING, gender STRING, first_name STRING, last_name STRING, 
@@ -32,11 +36,12 @@ class Kafka_Consumer:
             """
 
     def getKafkaData(self, kafka_df):
+        # Extract and transform Kafka data
         from pyspark.sql.functions import cast, from_json
 
         print("Schema Entered")
 
-        data =  (kafka_df.select(kafka_df.key.cast("string").alias("key"),
+        data = (kafka_df.select(kafka_df.key.cast("string").alias("key"),
                             from_json(kafka_df.value.cast("string"), self.getSchema()).alias("value"),
                             "topic", "partition", "offset", kafka_df.timestamp.cast("LONG").alias("timestamp"))
                 )
@@ -46,12 +51,16 @@ class Kafka_Consumer:
         return data
     
     def waitForMicroBatch(self, sleep=3000):
+        # Wait for micro-batch processing
         import time
         print(f"\tWaiting for {sleep} milliseconds...", end='')
         time.sleep(sleep / 1000)  # Convert milliseconds to seconds
         print("Done.")
 
     def mergeOutputFiles(self):
+        # Merge output JSON files
+        # Note: This code assumes dbutils and spark are globally accessible
+        # Consider passing these objects as parameters if possible
         # List all JSON files in the ADLS directory
         json_files = dbutils.fs.ls(self.checkpoint_base)
         json_files = [file.path for file in json_files if file.path.endswith(".json")]
@@ -75,6 +84,7 @@ class Kafka_Consumer:
         return 0
 
     def process(self, startingTime=1, maxOffsetsPerTrigger=10000, triggerInterval="30 seconds"):
+        # Process Kafka data using Spark structured streaming
         spark = SparkSession.builder.appName("KafkaData").getOrCreate()
         rawDF = self.ingestFromKafka(startingTime, maxOffsetsPerTrigger)
         KafkaDF = self.getKafkaData(rawDF)
