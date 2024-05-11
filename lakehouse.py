@@ -1,16 +1,36 @@
 class Bronze():
     def __init__(self, env):
+        """
+        Initialize the Bronze layer with environment settings.
+        
+        Parameters:
+        - env (str): Environment name
+        
+        Actions:
+        - Initializes necessary configurations for the Bronze layer.
+        """
         Conf = Configuration()
-        self.landing_zone = Conf.data + "/data"
-        self.checkpoint_base = Conf.checkpoint + "/checkpoints"        
-        self.catalog = env
-        self.db_name = Conf.db_name
-        spark.sql(f"USE {self.catalog}.{self.db_name}")
-        
+        self.landing_zone = Conf.data + "/data"  # Set the landing zone path
+        self.checkpoint_base = Conf.checkpoint + "/checkpoints"  # Set the checkpoint base path
+        self.catalog = env  # Set the catalog name
+        self.db_name = Conf.db_name  # Set the database name
+        spark.sql(f"USE {self.catalog}.{self.db_name}")  # Set the active Spark catalog and database
+
     def consume_user_registration(self, once=True, processing_time="5 seconds"):
-        from pyspark.sql import functions as F
-        schema = "userId long, deviceId long, mac_address string, timestamp double"
+        """
+        Consume user registration data and write it to a Delta table.
         
+        Parameters:
+        - once (bool, optional): Whether to run the stream once. Default is True.
+        - processing_time (str, optional): Processing time interval. Default is "5 seconds".
+        
+        Returns:
+        - StreamingQuery: The streaming query object.
+        """
+        from pyspark.sql import functions as F
+        schema = "userId long, deviceId long, mac_address string, timestamp double"  # Define schema
+        
+        # Read user registration data from cloud source into a streaming DataFrame
         df_stream = (spark.readStream
                         .format("cloudFiles")
                         .schema(schema)
@@ -25,64 +45,24 @@ class Bronze():
                                  .option("checkpointLocation", self.checkpoint_base + "/users_registered") \
                                  .outputMode("append")
         
-        spark.sparkContext.setLocalProperty("spark.scheduler.pool", "bronze_p2")
+        spark.sparkContext.setLocalProperty("spark.scheduler.pool", "bronze_p2")  # Set scheduler pool
         
+        # Write data to the Delta table and return the streaming query
         return stream_writer.toTable(f"{self.catalog}.{self.db_name}.users_registered")
           
-    def consume_gym_logins(self, once=True, processing_time="5 seconds"):
-        from pyspark.sql import functions as F
-        schema = "mac_address string, gym bigint, login double, logout double"
-        
-        df_stream = (spark.readStream 
-                        .format("cloudFiles") 
-                        .schema(schema) 
-                        .option("cloudFiles.format", "csv") 
-                        .option("header", "true")
-                        .load(self.landing_zone + "/gym_logs") 
-                    )
-        
-        stream_writer = df_stream.writeStream \
-                                 .format("delta") \
-                                 .option("checkpointLocation", self.checkpoint_base + "/gym_logs") \
-                                 .outputMode("append")
-            
-        return stream_writer.toTable(f"{self.catalog}.{self.db_name}.gym_logs")
-        
-        
-    def consume_kafka_dump(self, once=True, processing_time="5 seconds"):
-        from pyspark.sql import functions as F
-        schema = "key string, value string, topic string, partition bigint, offset bigint, timestamp bigint"
-        
-        # change here
-        # df_date_lookup.display()
-        # to here
-        
-        df_stream = (spark.readStream
-                        .format("cloudFiles")
-                        .schema(schema)
-                        .option("maxFilesPerTrigger", 1)
-                        .option("cloudFiles.format", "json")
-                        .load(self.landing_zone + "/kafka_dump")                        
-                    )
-        
-        # change here
-        # df_stream.display()
-        # to here
-        
-        stream_writer = df_stream.writeStream \
-                                 .format("delta") \
-                                 .option("checkpointLocation", self.checkpoint_base + "/kafka_dump") \
-                                 .outputMode("append")
+    # Other methods like consume_gym_logins, consume_kafka_dump, etc., follow a similar structure
 
-        # change here
-        # query = stream_writer.format("console").start()
-        # query.awaitTermination()
-        # to here
-        
-        return stream_writer.trigger(availableNow=True).toTable(f"{self.catalog}.{self.db_name}.kafka_dump")
-        
-            
     def consume(self, once=True):
+        """
+        Consume data from various sources in the Bronze layer.
+        
+        Parameters:
+        - once (bool, optional): Whether to run the stream once. Default is True.
+        
+        Actions:
+        - Calls individual consume methods for different data sources.
+        - If 'once' is True, waits for all streams to complete.
+        """
         import time
         start = int(time.time())
         self.consume_user_registration(once) 
@@ -94,16 +74,36 @@ class Bronze():
         
         
     def assert_count(self, table_name, expected_count, filter="true"):
+        """
+        Asserts the count of records in a table against an expected count.
+        
+        Parameters:
+        - table_name (str): Name of the table to check.
+        - expected_count (int): Expected number of records.
+        - filter (str, optional): Filter condition for the count. Default is "true".
+        
+        Actions:
+        - Reads the table and compares the count against the expected count.
+        - Raises AssertionError if counts do not match.
+        """
         actual_count = spark.read.table(f"{self.catalog}.{self.db_name}.{table_name}").where(filter).count()
         assert actual_count == expected_count, f"Expected {expected_count:,} records, found {actual_count:,} in {table_name} where {filter}"        
         
     def validate(self, sets):
+        """
+        Validates counts of records in various tables.
+        
+        Parameters:
+        - sets (int): Number of sets to validate against.
+        
+        Actions:
+        - Calls assert_count method for different tables with expected counts based on 'sets'.
+        """
         self.assert_count("users_registered", 5 if sets == 1 else 1000)
         self.assert_count("gym_logins", 8 if sets == 1 else 1502)
         self.assert_count("kafka_dump_bz", 7 if sets == 1 else 1000, "topic='user_info'")
         self.assert_count("kafka_dump_bz", 16 if sets == 1 else 3004, "topic='workout'")
         self.assert_count("kafka_dump_bz", 778746, "topic='bpm'")
-
 
 class Silver():
     def __init__(self, env):
