@@ -8,7 +8,7 @@
 - [Project Architecture](#project-architecture)
 - [Types of Data](#types-of-data)
 - [Kafka](#kafka)
-- [References](#references)
+- [Steps to Run the Application](#Steps-to-Run-the-Application)
 
 ## Introduction
 Welcome to the Fitbit Analysis System README! This system is designed to track user heart rates throughout the day using registered Fitbit devices. It leverages a lakehouse architecture to store and process data efficiently.
